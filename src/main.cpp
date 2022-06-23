@@ -1,86 +1,69 @@
 #define WIN32_LEAN_AND_MEAN
 #include "Windows.h"
-#include <gd.h>
 #include <iostream>
 #include <fstream>
-#include <filesystem>
 #include <cstdio>
 #include <ctime>
+#include <filesystem>
+#include <winsock2.h>
+#include <curl/curl.h>
+#include <cocos2d.h>
 
-using namespace cocos2d;
-using namespace cocos2d::extension;
 //using namespace gd;
+class Updater {
+    std::ofstream logStream;
+    std::string channel;
+    std::string version;
+    bool shownDownloadError = false;
+    bool isLoaded = false;
 
-class BIUpdateManager : public CCNode {
+    struct HttpResponse {
+        std::string header;
+        std::string content;
+        CURLcode curlCode;
+        long responseCode;
+    };
+
     const char* BIurlRoot = "https://geometrydash.eu/mods/betterinfo/v1/";
 
-    //std::vector<std::string> resources;
-    std::ofstream logStream;
-    std::string version;
-    std::string channel;
-    size_t requests = 0;
-    size_t responses = 0;
-    bool isLoaded = false;
-    bool shownDownloadError = false;
-public:
-    static BIUpdateManager* create() {
-        auto ret = new BIUpdateManager();
-        if (ret && ret->init()) {
-            ret->autorelease();
-        } else {
-            delete ret;
-            ret = nullptr;
-        }
-        return ret;
+    /**
+     * Path/URL helper functions
+     */
+    std::string BIpath(const std::string& file) {
+        std::stringstream pathStream;
+        pathStream << cocos2d::CCFileUtils::sharedFileUtils()->getWritablePath2() << "betterinfo";
+        std::filesystem::create_directory(pathStream.str());
+        pathStream << "/" << file;
+        return pathStream.str();
     }
 
-    bool init() {
-        bool init = CCNode::init();
-        if(!init) return false;
-
-        logStream.open(BIpath("log.txt"), std::ios_base::app);
-        log("--------------------------");
-        log("Loading BetterInfo Wrapper");
-
-        return true;
+    std::string resourcesPath(const std::string& file) {
+        std::stringstream pathStream;
+        pathStream << cocos2d::CCFileUtils::sharedFileUtils()->getWritablePath2() << "Resources/" << file;
+        return pathStream.str();
     }
 
-    void showFileWriteError(const std::string& file) {
-        log("Failed to write: " + file);
-        std::stringstream errorText;
-        errorText << "Unable to write the following file: " << file << "\n\nMake sure you have enough disk space available and that Geometry Dash has permissions to write in the directory.\n\nIf the problem persists, you might want to look at the instructions for manual installation.";
-        MessageBox(nullptr, errorText.str().c_str(), "BetterInfo", MB_ICONERROR | MB_OK);
+    std::string channelUrl(const std::string& file) {
+        std::stringstream urlStream;
+        urlStream << BIurlRoot << channel << "/" << file;
+        return urlStream.str();
     }
 
-    void showDownloadError() {
-        if(!shownDownloadError) MessageBox(nullptr, "Unable to download all required files to load BetterInfo.\n\nPlease make sure that you are connected to the internet and that Geometry Dash is able to access it.\n\nIf the problem persists, you might want to look at the instructions for manual installation.", "BetterInfo", MB_ICONERROR | MB_OK);
-        shownDownloadError = true;
+    std::string versionUrl(const std::string& file) {
+        std::stringstream urlStream;
+        urlStream << BIurlRoot << version << "/" << file;
+        return urlStream.str();
     }
 
-    void releaseIfDone() {
-        if(requests != responses) return;
-        log("BetterInfo Wrapper finished");
-        logStream.close();
-        this->release();
+    std::string versionResourcesUrl(const std::string& file) {
+        std::stringstream urlStream;
+        urlStream << "resources/" << file;
+        return versionUrl(urlStream.str());
     }
 
-    void log(std::string status) {
-        auto t = std::time(nullptr);
-        struct tm timeinfo;
-        localtime_s(&timeinfo, &t);
-        logStream << "[" << std::put_time(&timeinfo, "%d-%m-%Y %H-%M-%S") << "] " << status << std::endl;
-    }
-
-    void updateAndLoad() {
-        if(updateChannel() == "disabled") return;
-        doVersionHttpRequest();
-    }
-
-    void tryLoadMinhook() {
-        if(updateChannel() == "disabled") return;
-        if(LoadLibrary("minhook.x32.dll") == nullptr && !std::filesystem::exists("minhook.x32.dll")) doMinhookUrlHttpRequest();
-    }
-
+    /**
+     * String helper functions
+     */
     void trimString(std::string& string) {
         string.erase(0, string.find_first_not_of('\n'));
         string.erase(string.find_last_not_of('\n') + 1);
@@ -90,18 +73,79 @@ public:
         string.erase(string.find_last_not_of(' ') + 1);
     }
 
-    std::string BIpath(const std::string& file) {
-        std::stringstream pathStream;
-        pathStream << CCFileUtils::sharedFileUtils()->getWritablePath2() << "betterinfo";
-        std::filesystem::create_directory(pathStream.str());
-        pathStream << "/" << file;
-        return pathStream.str();
+    void log(std::string status) {
+        auto t = std::time(nullptr);
+        struct tm timeinfo;
+        localtime_s(&timeinfo, &t);
+        logStream << "[" << std::put_time(&timeinfo, "%d-%m-%Y %H-%M-%S") << "] " << status << std::endl;
     }
 
-    std::string resourcesPath(const std::string& file) {
-        std::stringstream pathStream;
-        pathStream << CCFileUtils::sharedFileUtils()->getWritablePath2() << "Resources/" << file;
-        return pathStream.str();
+    /**
+     * Error helper functions
+     */
+    void showCriticalError(const char* content) {
+        MessageBox(nullptr, content, "BetterInfo - Geometry Dash", MB_OK | MB_ICONERROR | MB_SETFOREGROUND);
+    }
+
+    void showFileWriteError(const std::string& file) {
+        log("Failed to write: " + file);
+        std::stringstream errorText;
+        errorText << "Unable to write the following file: " << file << "\n\nMake sure you have enough disk space available and that Geometry Dash has permissions to write in the directory.\n\nIf the problem persists, you might want to look at the instructions for manual installation.";
+        showCriticalError(errorText.str().c_str());
+    }
+
+    void showDownloadError() {
+        if(!shownDownloadError) showCriticalError("Unable to download all required files to load BetterInfo.\n\nPlease make sure that you are connected to the internet and that Geometry Dash is able to access it.\n\nIf the problem persists, you might want to look at the instructions for manual installation.");
+        shownDownloadError = true;
+    }
+
+    /**
+     * CURL helper functions
+     */
+    static size_t writeData(void *ptr, size_t size, size_t nmemb, std::string* data) {
+        data->append((char*) ptr, size * nmemb);
+        return size * nmemb;
+    }
+
+    HttpResponse sendWebRequest(const std::string& url) {
+        auto curl = curl_easy_init();
+        if(!curl) {
+            if(!isLoaded) showCriticalError("Failed to initialize curl, as a result files required to load BetterInfo won't be downloaded.\n\nIf the problem persists, you might want to look at the instructions for manual installation.");
+            log("Failed to initialize curl");
+            return {"", "", CURLE_FAILED_INIT, 0};
+        }
+
+        HttpResponse ret;
+
+        curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+        curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 1L);
+        curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 50L);
+        curl_easy_setopt(curl, CURLOPT_TCP_KEEPALIVE, 1L);
+
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeData);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &(ret.content));
+        curl_easy_setopt(curl, CURLOPT_HEADERDATA, &(ret.header));
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, FALSE);
+        curl_easy_setopt(curl, CURLOPT_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
+        curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
+        curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, TRUE);
+
+        ret.curlCode = curl_easy_perform(curl);
+        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &(ret.responseCode));
+
+        curl_easy_cleanup(curl);
+        log(url + ": " + std::to_string(ret.responseCode));
+        return ret;
+    }
+
+    /**
+     * Updater logic
+     */
+    void dumpToFile(const std::string& path, std::string data) {
+        std::ofstream fout(path, std::ios::out | std::ios::binary);
+        fout.write(data.c_str(), data.size());
+        fout.close();
+        if(!fout) showFileWriteError(path);
     }
 
     std::string updateChannel() {
@@ -123,220 +167,9 @@ public:
         log("Current update channel is: " + channel);
 
         return channel;
-    } 
-
-    std::string channelUrl(const std::string& file) {
-        std::stringstream urlStream;
-        urlStream << BIurlRoot << channel << "/" << file;
-        return urlStream.str();
     }
 
-    std::string versionUrl(const std::string& file) {
-        std::stringstream urlStream;
-        urlStream << BIurlRoot << version << "/" << file;
-        return urlStream.str();
-    }
-
-    std::string versionResourcesUrl(const std::string& file) {
-        std::stringstream urlStream;
-        urlStream << "resources/" << file;
-        return versionUrl(urlStream.str());
-    }
-
-    void dumpToFile(const std::string& path, std::vector<char>* data) {
-        std::ofstream fout(path, std::ios::out | std::ios::binary);
-        fout.write((char*)&((*data)[0]), data->size());
-        fout.close();
-        if(!fout) showFileWriteError(path);
-    }
-
-    void dumpToFile(const std::string& path, std::string data) {
-        std::ofstream fout(path, std::ios::out | std::ios::binary);
-        fout.write(data.c_str(), data.size());
-        fout.close();
-        if(!fout) showFileWriteError(path);
-    }
-
-    void doHttpRequest(const std::string& url, SEL_HttpResponse pSelector) {
-        requests++;
-        CCHttpRequest* request = new CCHttpRequest;
-        request->setUrl(url.c_str());
-        request->setRequestType(CCHttpRequest::HttpRequestType::kHttpPost);
-        request->setResponseCallback(this, pSelector);
-        CCHttpClient::getInstance()->send(request);
-        request->release();
-        log("Sending a HTTP request to: " + url);
-    }
-
-    void doHttpRequest(const std::string& url, SEL_HttpResponse pSelector, const std::string& userData) {
-        requests++;
-        CCHttpRequest* request = new CCHttpRequest;
-        request->setUrl(url.c_str());
-        request->setRequestType(CCHttpRequest::HttpRequestType::kHttpPost);
-        request->setResponseCallback(this, pSelector);
-        std::string* userDataReal = new std::string(userData);
-        request->setUserData(userDataReal);
-        CCHttpClient::getInstance()->send(request);
-        request->release();
-        log("Sending a HTTP request to: " + url);
-    }
-
-    void doMinhookUrlHttpRequest() {
-        doHttpRequest(channelUrl("minhook.txt"), httpresponse_selector(BIUpdateManager::onMinhookUrlHttpResponse));
-    }
-
-    void onMinhookUrlHttpResponse(CCHttpClient* client, CCHttpResponse* response) {
-        responses++;
-        if(!(response->isSucceed())) {
-            log("Getting minhook url failed - error code: " + std::to_string(response->getResponseCode()));
-            if(!isLoaded) showDownloadError();
-            releaseIfDone();
-            return;
-        }
-
-        std::vector<char>* responseData = response->getResponseData();
-        std::string downloadUrl(responseData->begin(), responseData->end());
-        trimString(downloadUrl);
-
-        doMinhookDownloadHttpRequest(downloadUrl);
-    }
-
-    void doMinhookDownloadHttpRequest(const std::string& downloadUrl) {
-        doHttpRequest(downloadUrl, httpresponse_selector(BIUpdateManager::onMinhookDownloadHttpResponse));
-    }
-
-    void onMinhookDownloadHttpResponse(CCHttpClient* client, CCHttpResponse* response) {
-        responses++;
-        if(!(response->isSucceed())) {
-            log("Downloading minhook.x32.dll failed - error code: " + std::to_string(response->getResponseCode()));
-            if(!isLoaded) showDownloadError();
-            releaseIfDone();
-            return;
-        }
-
-        std::vector<char>* responseData = response->getResponseData();
-
-        dumpToFile("minhook.x32.dll", responseData);
-
-        releaseIfDone();
-
-    }
-
-    void doVersionHttpRequest() {
-        doHttpRequest(channelUrl("version.txt"), httpresponse_selector(BIUpdateManager::onVersionHttpResponse));
-    }
-
-    void onVersionHttpResponse(CCHttpClient* client, CCHttpResponse* response) {
-        responses++;
-        if(!(response->isSucceed())) {
-            log("Getting current version of BetterInfo failed - error code: " + std::to_string(response->getResponseCode()));
-            if(!isLoaded) showDownloadError();
-            releaseIfDone();
-            return;
-        }
-
-        std::vector<char>* responseData = response->getResponseData();
-        version = std::string(responseData->begin(), responseData->end());
-        trimString(version);
-
-        std::ifstream versionStream(BIpath("version.txt"));
-        std::string installedVersion;
-        versionStream >> installedVersion;
-        //MessageBox(nullptr, installedVersion.c_str(), "installedVersion", MB_OK);
-        versionStream.close();
-
-        log("Installed Version: " + installedVersion + ", current version: " + version);
-
-        if(installedVersion.empty() || installedVersion != version || !std::filesystem::exists(BIpath("betterinfo.dll"))) doUpdateHttpRequest();
-        doResourcesHttpRequest();
-    }
-
-    void doUpdateHttpRequest() {
-        doHttpRequest(versionUrl("betterinfo.dll"), httpresponse_selector(BIUpdateManager::onUpdateHttpResponse));
-    }
-
-    void onUpdateHttpResponse(CCHttpClient* client, CCHttpResponse* response) {
-        responses++;
-        if(!(response->isSucceed())) {
-            log("Downloading betterinfo.dll failed - error code: " + std::to_string(response->getResponseCode()));
-            if(!isLoaded) showDownloadError();
-            releaseIfDone();
-            return;
-        }
-
-        std::vector<char>* responseData = response->getResponseData();
-
-        dumpToFile(BIpath("betterinfo_updated.dll"), responseData);
-
-        if(!isLoaded) loadBI();
-
-        dumpToFile(BIpath("version.txt"), version);
-
-    }
-
-    void doResourcesHttpRequest() {
-        doHttpRequest(versionUrl("resources.txt"), httpresponse_selector(BIUpdateManager::onResourcesHttpResponse));
-    }
-
-    void onResourcesHttpResponse(CCHttpClient* client, CCHttpResponse* response) {
-        responses++;
-        if(!(response->isSucceed())) {
-            log("Downloading resource list failed - error code: " + std::to_string(response->getResponseCode()));
-            releaseIfDone();
-            return;
-        }
-
-        std::vector<char>* responseData = response->getResponseData();
-        std::string responseString(responseData->begin(), responseData->end());
-        std::stringstream responseStream(responseString);
-
-        for(std::string resource; std::getline(responseStream, resource); ) {
-
-            trimString(resource);
-            verifyResource(resource);
-        }
-
-        releaseIfDone();
-
-    }
-
-    void verifyResource(const std::string& resource) {
-        std::string pngPath(
-            CCFileUtils::sharedFileUtils()->fullPathForFilename(
-                resource.c_str(), false
-            )
-        );
-
-        if(!(CCFileUtils::sharedFileUtils()->isFileExist(pngPath))) {
-            doResourceDownloadHttpRequest(resource);
-        }
-    }
-
-    void doResourceDownloadHttpRequest(const std::string& resource){
-        doHttpRequest(versionResourcesUrl(resource), httpresponse_selector(BIUpdateManager::onResourceDownloadHttpResponse), resource);
-    }
-
-    void onResourceDownloadHttpResponse(CCHttpClient* client, CCHttpResponse* response){
-        responses++;
-        auto userData = reinterpret_cast<std::string*>(response->getHttpRequest()->getUserData());
-
-        if(!(response->isSucceed())) {
-            log("Downloading resource " + *userData + " failed - error code: " + std::to_string(response->getResponseCode()));
-            delete userData;
-            //MessageBox(nullptr, std::to_string(response->getResponseCode()).c_str(), "onResourceDownloadHttpResponse", MB_OK);
-            return;
-        }
-
-        std::vector<char>* responseData = response->getResponseData();
-
-        dumpToFile(resourcesPath(*userData), responseData);
-        delete userData;
-
-        releaseIfDone();
-
-    }
-
-    void loadBI() {
+    bool loadBI() {
         
         if(std::filesystem::exists(BIpath("betterinfo_updated.dll"))) {
             log("Found downloaded update, renaming dll");
@@ -346,16 +179,85 @@ public:
 
         isLoaded = (LoadLibrary(BIpath("betterinfo.dll").c_str()) != nullptr);
         log(isLoaded ? "Loaded BetterInfo Mod" : "Failed to load BetterInfo Mod");
+        return isLoaded;
+    }
+
+    std::string installedVersion() {
+        std::ifstream versionStream(BIpath("version.txt"));
+        std::string installedVersion;
+        versionStream >> installedVersion;
+        versionStream.close();
+        return installedVersion;
+    }
+
+    bool resourceExists(const std::string& resource) {
+        std::string pngPath(
+            cocos2d::CCFileUtils::sharedFileUtils()->fullPathForFilename(
+                resource.c_str(), false
+            )
+        );
+
+        auto pos = pngPath.find_last_of("\\/");
+        if (pos != std::string::npos) {
+            pngPath.erase(pos);
+            pngPath += "/" + resource;
+        }
+
+        return cocos2d::CCFileUtils::sharedFileUtils()->isFileExist(pngPath);
+    }
+
+public:
+    Updater() {
+        logStream.open(BIpath("log.txt"), std::ios_base::app);
+        log("--------------------------");
+        log("Loading BetterInfo Wrapper");
+        isLoaded = loadBI();
+
+        if(updateChannel() == "disabled") return;
+
+        /**
+         * Checking for new version
+         */
+        auto response = sendWebRequest(channelUrl("version.txt"));
+        if(response.curlCode != CURLE_OK) { if(!isLoaded) showDownloadError(); return; }
+        version = response.content;
+        trimString(version);
+
+        /**
+         * Download new version if online version doesn't match offline version
+         */
+        std::string installedVersion(installedVersion());
+        if(installedVersion.empty() || installedVersion != version || !std::filesystem::exists(BIpath("betterinfo.dll"))) {
+            response = sendWebRequest(versionUrl("betterinfo.dll"));
+            if(response.curlCode != CURLE_OK) { if(!isLoaded) showDownloadError(); return; }
+
+            dumpToFile(BIpath("betterinfo_updated.dll"), response.content);
+            if(!isLoaded) loadBI();
+            dumpToFile(BIpath("version.txt"), version);
+        }
+
+        /**
+         * Verify if all resources are present and download ones that aren't
+         */
+        response = sendWebRequest(versionUrl("resources.txt"));
+        if(response.curlCode != CURLE_OK) return;
+        std::stringstream responseStream(response.content);
+
+        for(std::string resource; std::getline(responseStream, resource); ) {
+            trimString(resource);
+            if(resourceExists(resource)) continue;
+
+            response = sendWebRequest(versionResourcesUrl(resource));
+            if(response.curlCode != CURLE_OK) continue;
+
+            dumpToFile(resourcesPath(resource), response.content);
+        }
     }
 };
 
 DWORD WINAPI my_thread(void* hModule) {
 
-    auto manager = BIUpdateManager::create();
-    manager->retain();
-    manager->tryLoadMinhook();
-    manager->loadBI();
-    manager->updateAndLoad();
+    Updater();
 
     return 0;
 }

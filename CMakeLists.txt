@@ -14,8 +14,8 @@ file(
 
 add_library(betterinfo-wrapper SHARED ${SOURCE_FILES})
 
-target_include_directories(betterinfo-wrapper PRIVATE libraries/gd.h libraries/gd.h/include)
-target_link_libraries(betterinfo-wrapper cocos2d)
+target_include_directories(betterinfo-wrapper PRIVATE libraries/gd.h libraries/gd.h/include ${CMAKE_SOURCE_DIR}/libraries/curl/include)
+target_link_libraries(betterinfo-wrapper cocos2d  ${CMAKE_SOURCE_DIR}/libraries/curl/libcurl.lib )
 target_link_options(betterinfo-wrapper PRIVATE "/OPT:REF,NOICF")
 #end betterinfo-wrapper
 
@@ -26,5 +26,5 @@ if (${CMAKE_CXX_COMPILER_ID} STREQUAL Clang)
   add_definitions("--target=i386-pc-windows-msvc")
 endif()
 
-add_subdirectory(libraries/minhook)
 add_subdirectory(libraries/cocos-headers)
+

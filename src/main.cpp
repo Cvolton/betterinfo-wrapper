@@ -1,5 +1,4 @@
 #define WIN32_LEAN_AND_MEAN
-#include "mapped-hooks.hpp"
 #include "Windows.h"
 #include <gd.h>
 #include <iostream>
@@ -7,7 +6,6 @@
 #include <filesystem>
 #include <cstdio>
 #include <ctime>
-#include "utils.hpp"
 
 using namespace cocos2d;
 using namespace cocos2d::extension;

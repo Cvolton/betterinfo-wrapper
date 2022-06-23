@@ -14,8 +14,8 @@ file(
 
 add_library(betterinfo-wrapper SHARED ${SOURCE_FILES})
 
-target_include_directories(betterinfo-wrapper PRIVATE libraries/minhook/include libraries/gd.h libraries/gd.h/include)
-target_link_libraries(betterinfo-wrapper minhook cocos2d)
+target_include_directories(betterinfo-wrapper PRIVATE libraries/gd.h libraries/gd.h/include)
+target_link_libraries(betterinfo-wrapper cocos2d)
 target_link_options(betterinfo-wrapper PRIVATE "/OPT:REF,NOICF")
 #end betterinfo-wrapper
 

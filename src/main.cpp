@@ -12,7 +12,7 @@ using namespace cocos2d::extension;
 //using namespace gd;
 
 class BIUpdateManager : public CCNode {
-    const char* BIurlRoot = "https://geometrydash.eu/mods/betterinfo/";
+    const char* BIurlRoot = "https://geometrydash.eu/mods/betterinfo/v1/";
 
     //std::vector<std::string> resources;
     std::ofstream logStream;
@@ -21,6 +21,7 @@ class BIUpdateManager : public CCNode {
     size_t requests = 0;
     size_t responses = 0;
     bool isLoaded = false;
+    bool shownDownloadError = false;
 public:
     static BIUpdateManager* create() {
         auto ret = new BIUpdateManager();
@@ -51,6 +52,11 @@ public:
         MessageBox(nullptr, errorText.str().c_str(), "BetterInfo", MB_ICONERROR | MB_OK);
     }
 
+    void showDownloadError() {
+        if(!shownDownloadError) MessageBox(nullptr, "Unable to download all required files to load BetterInfo.\n\nPlease make sure that you are connected to the internet and that Geometry Dash is able to access it.\n\nIf the problem persists, you might want to look at the instructions for manual installation.", "BetterInfo", MB_ICONERROR | MB_OK);
+        shownDownloadError = true;
+    }
+
     void releaseIfDone() {
         if(requests != responses) return;
         log("BetterInfo Wrapper finished");
@@ -68,6 +74,11 @@ public:
     void updateAndLoad() {
         if(updateChannel() == "disabled") return;
         doVersionHttpRequest();
+    }
+
+    void tryLoadMinhook() {
+        if(updateChannel() == "disabled") return;
+        if(LoadLibrary("minhook.x32.dll") == nullptr && !std::filesystem::exists("minhook.x32.dll")) doMinhookUrlHttpRequest();
     }
 
     void trimString(std::string& string) {
@@ -94,6 +105,8 @@ public:
     }
 
     std::string updateChannel() {
+        if(!channel.empty()) return channel;
+
         std::ifstream channelStream(BIpath("channel.txt"));
         channelStream >> channel;
         channelStream.close();
@@ -152,6 +165,7 @@ public:
         request->setResponseCallback(this, pSelector);
         CCHttpClient::getInstance()->send(request);
         request->release();
+        log("Sending a HTTP request to: " + url);
     }
 
     void doHttpRequest(const std::string& url, SEL_HttpResponse pSelector, const std::string& userData) {
@@ -164,6 +178,48 @@ public:
         request->setUserData(userDataReal);
         CCHttpClient::getInstance()->send(request);
         request->release();
+        log("Sending a HTTP request to: " + url);
+    }
+
+    void doMinhookUrlHttpRequest() {
+        doHttpRequest(channelUrl("minhook.txt"), httpresponse_selector(BIUpdateManager::onMinhookUrlHttpResponse));
+    }
+
+    void onMinhookUrlHttpResponse(CCHttpClient* client, CCHttpResponse* response) {
+        responses++;
+        if(!(response->isSucceed())) {
+            log("Getting minhook url failed - error code: " + std::to_string(response->getResponseCode()));
+            if(!isLoaded) showDownloadError();
+            releaseIfDone();
+            return;
+        }
+
+        std::vector<char>* responseData = response->getResponseData();
+        std::string downloadUrl(responseData->begin(), responseData->end());
+        trimString(downloadUrl);
+
+        doMinhookDownloadHttpRequest(downloadUrl);
+    }
+
+    void doMinhookDownloadHttpRequest(const std::string& downloadUrl) {
+        doHttpRequest(downloadUrl, httpresponse_selector(BIUpdateManager::onMinhookDownloadHttpResponse));
+    }
+
+    void onMinhookDownloadHttpResponse(CCHttpClient* client, CCHttpResponse* response) {
+        responses++;
+        if(!(response->isSucceed())) {
+            log("Downloading minhook.x32.dll failed - error code: " + std::to_string(response->getResponseCode()));
+            if(!isLoaded) showDownloadError();
+            releaseIfDone();
+            return;
+        }
+
+        std::vector<char>* responseData = response->getResponseData();
+
+        dumpToFile("minhook.x32.dll", responseData);
+
+        releaseIfDone();
+
     }
 
     void doVersionHttpRequest() {
@@ -174,7 +230,7 @@ public:
         responses++;
         if(!(response->isSucceed())) {
             log("Getting current version of BetterInfo failed - error code: " + std::to_string(response->getResponseCode()));
-            if(!isLoaded) MessageBox(nullptr, "Unable to start downloading all required files to load BetterInfo.\n\nPlease make sure that you are connected to the internet and that Geometry Dash is able to access it.\n\nIf the problem persists, you might want to look at the instructions for manual installation.", "BetterInfo", MB_ICONERROR | MB_OK);
+            if(!isLoaded) showDownloadError();
             releaseIfDone();
             return;
         }
@@ -203,7 +259,7 @@ public:
         responses++;
         if(!(response->isSucceed())) {
             log("Downloading betterinfo.dll failed - error code: " + std::to_string(response->getResponseCode()));
-            if(!isLoaded) MessageBox(nullptr, "Unable to download all required files to load BetterInfo.\n\nPlease make sure that you are connected to the internet and that Geometry Dash is able to access it.\n\nIf the problem persists, you might want to look at the instructions for manual installation.", "BetterInfo", MB_ICONERROR | MB_OK);
+            if(!isLoaded) showDownloadError();
             releaseIfDone();
             return;
         }
@@ -297,6 +353,7 @@ DWORD WINAPI my_thread(void* hModule) {
 
     auto manager = BIUpdateManager::create();
     manager->retain();
+    manager->tryLoadMinhook();
     manager->loadBI();
     manager->updateAndLoad();
 

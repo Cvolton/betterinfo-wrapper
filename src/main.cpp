@@ -249,6 +249,7 @@ public:
 
             dumpToFile(BIpath("betterinfo_updated.dll"), response.content);
             if(!isLoaded) loadBI();
+
             dumpToFile(BIpath("version.txt"), version);
         }
 

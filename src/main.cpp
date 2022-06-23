@@ -10,7 +10,8 @@
 #include <cocos2d.h>
 
 //using namespace gd;
-class Updater {
+class Updater { 
+public:
     std::ofstream logStream;
     std::string channel;
     std::string version;
@@ -83,7 +84,7 @@ class Updater {
     /**
      * Error helper functions
      */
-    void showCriticalError(const char* content) {
+    static void showCriticalError(const char* content) {
         MessageBox(nullptr, content, "BetterInfo - Geometry Dash", MB_OK | MB_ICONERROR | MB_SETFOREGROUND);
     }
 
@@ -210,7 +211,6 @@ class Updater {
         return cocos2d::CCFileUtils::sharedFileUtils()->isFileExist(pngPath);
     }
 
-public:
     Updater() {
         logStream.open(BIpath("log.txt"), std::ios_base::app);
         log("--------------------------");
@@ -273,6 +273,27 @@ public:
 
 DWORD WINAPI my_thread(void* hModule) {
 
+    /**
+     * Check if BI is already loaded, display error and exit if it is
+     */
+    char* filenameChar = new char[2048];
+    GetModuleFileName((HMODULE) hModule, filenameChar, 2048);
+    std::string filename(filenameChar);
+
+    auto pos = filename.find_last_of("\\/");
+    if(pos != std::string::npos) {
+        filename = filename.substr(pos + 1);
+    }
+
+    Sleep(100); //this should be enough time for the dll to start existing
+    if(filename != "betterinfo.dll" && GetModuleHandle("betterinfo.dll") != nullptr) {
+        Updater::showCriticalError("betterinfo.dll is already loaded.\n\nMake sure you do NOT have your modloader set to load both betterinfo.dll and betterinfo-wrapper.dll\n\nOnly betterinfo-wrapper.dll is supposed to be installed!");
+        return 0;
+    }
+
+    /**
+     * Start the main update check and loading operation
+     */
     Updater();
 
     return 0;

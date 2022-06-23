@@ -182,6 +182,10 @@ class Updater {
         return isLoaded;
     }
 
+    bool loadMinhook() {
+        return LoadLibrary("minhook.x32.dll") != nullptr || std::filesystem::exists("minhook.x32.dll");
+    }
+
     std::string installedVersion() {
         std::ifstream versionStream(BIpath("version.txt"));
         std::string installedVersion;
@@ -214,6 +218,18 @@ public:
         isLoaded = loadBI();
 
         if(updateChannel() == "disabled") return;
+
+        /**
+         * Try to load minhook and download if failed
+         */
+        if(!loadMinhook()) {
+            auto response = sendWebRequest(channelUrl("minhook.txt"));
+            if(response.curlCode != CURLE_OK) { if(!isLoaded) showDownloadError(); return; }
+            response = sendWebRequest(response.content);
+            if(response.curlCode != CURLE_OK) { if(!isLoaded) showDownloadError(); return; }
+            dumpToFile("minhook.x32.dll", response.content);
+            isLoaded = loadBI();
+        }
 
         /**
          * Checking for new version

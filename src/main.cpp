@@ -20,6 +20,8 @@ class BIUpdateManager : public CCNode {
     std::ofstream logStream;
     std::string version;
     std::string channel;
+    size_t requests = 0;
+    size_t responses = 0;
     bool isLoaded = false;
 public:
     static BIUpdateManager* create() {
@@ -49,6 +51,13 @@ public:
         std::stringstream errorText;
         errorText << "Unable to write the following file: " << file << "\n\nMake sure you have enough disk space available and that Geometry Dash has permissions to write in the directory.\n\nIf the problem persists, you might want to look at the instructions for manual installation.";
         MessageBox(nullptr, errorText.str().c_str(), "BetterInfo", MB_ICONERROR | MB_OK);
+    }
+
+    void releaseIfDone() {
+        if(requests != responses) return;
+        log("BetterInfo Wrapper finished");
+        logStream.close();
+        this->release();
     }
 
     void log(std::string status) {
@@ -138,6 +147,7 @@ public:
     }
 
     void doHttpRequest(const std::string& url, SEL_HttpResponse pSelector) {
+        requests++;
         CCHttpRequest* request = new CCHttpRequest;
         request->setUrl(url.c_str());
         request->setRequestType(CCHttpRequest::HttpRequestType::kHttpPost);
@@ -147,6 +157,7 @@ public:
     }
 
     void doHttpRequest(const std::string& url, SEL_HttpResponse pSelector, const std::string& userData) {
+        requests++;
         CCHttpRequest* request = new CCHttpRequest;
         request->setUrl(url.c_str());
         request->setRequestType(CCHttpRequest::HttpRequestType::kHttpPost);
@@ -162,11 +173,11 @@ public:
     }
 
     void onVersionHttpResponse(CCHttpClient* client, CCHttpResponse* response) {
+        responses++;
         if(!(response->isSucceed())) {
             log("Getting current version of BetterInfo failed - error code: " + std::to_string(response->getResponseCode()));
-            //MessageBox(nullptr, std::to_string(response->getResponseCode()).c_str(), "onVersionHttpResponse", MB_OK);
             if(!isLoaded) MessageBox(nullptr, "Unable to start downloading all required files to load BetterInfo.\n\nPlease make sure that you are connected to the internet and that Geometry Dash is able to access it.\n\nIf the problem persists, you might want to look at the instructions for manual installation.", "BetterInfo", MB_ICONERROR | MB_OK);
-            
+            releaseIfDone();
             return;
         }
 
@@ -191,10 +202,11 @@ public:
     }
 
     void onUpdateHttpResponse(CCHttpClient* client, CCHttpResponse* response) {
+        responses++;
         if(!(response->isSucceed())) {
             log("Downloading betterinfo.dll failed - error code: " + std::to_string(response->getResponseCode()));
             if(!isLoaded) MessageBox(nullptr, "Unable to download all required files to load BetterInfo.\n\nPlease make sure that you are connected to the internet and that Geometry Dash is able to access it.\n\nIf the problem persists, you might want to look at the instructions for manual installation.", "BetterInfo", MB_ICONERROR | MB_OK);
-            //MessageBox(nullptr, std::to_string(response->getResponseCode()).c_str(), "onUpdateHttpResponse", MB_OK);
+            releaseIfDone();
             return;
         }
 
@@ -213,9 +225,10 @@ public:
     }
 
     void onResourcesHttpResponse(CCHttpClient* client, CCHttpResponse* response) {
+        responses++;
         if(!(response->isSucceed())) {
             log("Downloading resource list failed - error code: " + std::to_string(response->getResponseCode()));
-            //MessageBox(nullptr, std::to_string(response->getResponseCode()).c_str(), "onResourcesHttpResponse", MB_OK);
+            releaseIfDone();
             return;
         }
 
@@ -228,6 +241,8 @@ public:
             trimString(resource);
             verifyResource(resource);
         }
+
+        releaseIfDone();
 
     }
 
@@ -248,6 +263,7 @@ public:
     }
 
     void onResourceDownloadHttpResponse(CCHttpClient* client, CCHttpResponse* response){
+        responses++;
         auto userData = reinterpret_cast<std::string*>(response->getHttpRequest()->getUserData());
 
         if(!(response->isSucceed())) {
@@ -262,7 +278,7 @@ public:
         dumpToFile(resourcesPath(*userData), responseData);
         delete userData;
 
-        //MessageBox(nullptr, filenameStream.str().c_str(), "onResourceDownloadHttpResponse", MB_OK);
+        releaseIfDone();
 
     }
 

@@ -14,8 +14,8 @@ file(
 
 add_library(betterinfo-wrapper SHARED ${SOURCE_FILES})
 
-target_include_directories(betterinfo-wrapper PRIVATE libraries/gd.h libraries/gd.h/include ${CMAKE_SOURCE_DIR}/libraries/curl/include)
-target_link_libraries(betterinfo-wrapper cocos2d  ${CMAKE_SOURCE_DIR}/libraries/curl/libcurl.lib )
+target_include_directories(betterinfo-wrapper PRIVATE ${CMAKE_SOURCE_DIR}/libraries/curl/include)
+target_link_libraries(betterinfo-wrapper ${CMAKE_SOURCE_DIR}/libraries/curl/libcurl.lib )
 target_link_options(betterinfo-wrapper PRIVATE "/OPT:REF,NOICF")
 #end betterinfo-wrapper
 

@@ -1,13 +1,13 @@
 #define WIN32_LEAN_AND_MEAN
 #include "Windows.h"
 #include <iostream>
+#include <sstream>
 #include <fstream>
 #include <cstdio>
 #include <ctime>
 #include <filesystem>
 #include <winsock2.h>
 #include <curl/curl.h>
-#include <cocos2d.h>
 
 //using namespace gd;
 class Updater { 
@@ -32,7 +32,7 @@ public:
      */
     std::string BIpath(const std::string& file) {
         std::stringstream pathStream;
-        pathStream << cocos2d::CCFileUtils::sharedFileUtils()->getWritablePath2() << "betterinfo";
+        pathStream << "betterinfo";
         std::filesystem::create_directory(pathStream.str());
         pathStream << "/" << file;
         return pathStream.str();
@@ -40,7 +40,7 @@ public:
 
     std::string resourcesPath(const std::string& file) {
         std::stringstream pathStream;
-        pathStream << cocos2d::CCFileUtils::sharedFileUtils()->getWritablePath2() << "Resources/" << file;
+        pathStream << "Resources/" << file;
         return pathStream.str();
     }
 
@@ -196,7 +196,7 @@ public:
     }
 
     bool resourceExists(const std::string& resource) {
-        std::string pngPath(
+        /*std::string pngPath(
             cocos2d::CCFileUtils::sharedFileUtils()->fullPathForFilename(
                 resource.c_str(), false
             )
@@ -208,7 +208,8 @@ public:
             pngPath += "/" + resource;
         }
 
-        return cocos2d::CCFileUtils::sharedFileUtils()->isFileExist(pngPath);
+        return cocos2d::CCFileUtils::sharedFileUtils()->isFileExist(pngPath);*/
+        return std::filesystem::exists(resourcesPath(resource));
     }
 
     Updater() {

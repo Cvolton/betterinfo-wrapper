@@ -133,6 +133,21 @@ public:
         ret.curlCode = curl_easy_perform(curl);
         curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &(ret.responseCode));
 
+        if(ret.content.size() == 0) {
+            log("Error: Empty file received");
+            ret.curlCode = CURLE_HTTP_RETURNED_ERROR;
+        }
+
+        if(ret.content.rfind("<html") == 0) {
+            log("Error: Invalid content - HTML detected");
+            ret.curlCode = CURLE_HTTP_RETURNED_ERROR;
+        }
+
+        if(ret.content.rfind("<!DOCT", 0) == 0) {
+            log("Error: Invalid content - DOCTYPE detected");
+            ret.curlCode = CURLE_HTTP_RETURNED_ERROR;
+        }
+
         curl_easy_cleanup(curl);
         log(url + ": " + std::to_string(ret.responseCode));
         return ret;

@@ -9,7 +9,6 @@
 #include <winsock2.h>
 #include <curl/curl.h>
 
-//using namespace gd;
 class Updater { 
 public:
     std::ofstream logStream;
@@ -196,19 +195,6 @@ public:
     }
 
     bool resourceExists(const std::string& resource) {
-        /*std::string pngPath(
-            cocos2d::CCFileUtils::sharedFileUtils()->fullPathForFilename(
-                resource.c_str(), false
-            )
-        );
-
-        auto pos = pngPath.find_last_of("\\/");
-        if (pos != std::string::npos) {
-            pngPath.erase(pos);
-            pngPath += "/" + resource;
-        }
-
-        return cocos2d::CCFileUtils::sharedFileUtils()->isFileExist(pngPath);*/
         return std::filesystem::exists(resourcesPath(resource));
     }
 

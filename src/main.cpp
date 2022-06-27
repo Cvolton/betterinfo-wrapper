@@ -290,7 +290,7 @@ DWORD WINAPI my_thread(void* hModule) {
 
     Sleep(100); //this should be enough time for the dll to start existing
     if(filename != "betterinfo.dll" && GetModuleHandle("betterinfo.dll") != nullptr) {
-        Updater::showCriticalError("betterinfo.dll is already loaded.\n\nMake sure you do NOT have your modloader set to load both betterinfo.dll and betterinfo-wrapper.dll\n\nOnly betterinfo-wrapper.dll is supposed to be installed!");
+        Updater::showCriticalError("betterinfo.dll is already loaded.\n\nMake sure you do NOT have your modloader set to load both betterinfo.dll and betterinfo-wrapper.dll\n\n\ntl;dr delete betterinfo.dll from extensions/quickldr/whatever to fix");
         return 0;
     }
 

@@ -227,6 +227,7 @@ public:
         if(!loadMinhook()) {
             auto response = sendWebRequest(channelUrl("minhook.txt"));
             if(response.curlCode != CURLE_OK) { if(!isLoaded) showDownloadError(); return; }
+            trimString(response.content);
             response = sendWebRequest(response.content);
             if(response.curlCode != CURLE_OK) { if(!isLoaded) showDownloadError(); return; }
             dumpToFile("minhook.x32.dll", response.content);

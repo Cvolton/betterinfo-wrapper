@@ -5,6 +5,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 cmake_policy(SET CMP0057 NEW)
 
 # option(BUILD_SHARED_LIBS "" ON)
+add_definitions(-DCURL_STATICLIB)
 
 #betterinfo-wrapper setup
 file(
@@ -15,7 +16,7 @@ file(
 add_library(betterinfo-wrapper SHARED ${SOURCE_FILES})
 
 target_include_directories(betterinfo-wrapper PRIVATE ${CMAKE_SOURCE_DIR}/libraries/curl/include)
-target_link_libraries(betterinfo-wrapper ${CMAKE_SOURCE_DIR}/libraries/curl/libcurl.lib )
+target_link_libraries(betterinfo-wrapper ${CMAKE_SOURCE_DIR}/libraries/curl/libcurl_a.lib ws2_32 Crypt32 Wldap32 Normaliz)
 target_link_options(betterinfo-wrapper PRIVATE "/OPT:REF,NOICF")
 #end betterinfo-wrapper
 
@@ -28,3 +29,5 @@ endif()
 
 add_subdirectory(libraries/cocos-headers)
 
+
+# special thanks to this github issue: https://github.com/curl/curl/issues/5308 for helping me figure out how to link curl statically

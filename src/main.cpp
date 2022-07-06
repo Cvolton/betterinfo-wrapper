@@ -24,14 +24,22 @@ public:
         long responseCode;
     };
 
-    const char* BIurlRoot = "https://geometrydash.eu/mods/betterinfo/v1/";
+    const char* BIurlRoot = "https://geometrydash.eu/mods/betterinfo/v2/";
 
     /**
      * Path/URL helper functions
      */
+    std::string BIpathV1(const std::string& file) {
+        std::stringstream pathStream;
+        pathStream << "betterinfo/";
+        std::filesystem::create_directory(pathStream.str());
+        pathStream << "/" << file;
+        return pathStream.str();
+    }
+
     std::string BIpath(const std::string& file) {
         std::stringstream pathStream;
-        pathStream << "betterinfo";
+        pathStream << "betterinfo/v2/";
         std::filesystem::create_directory(pathStream.str());
         pathStream << "/" << file;
         return pathStream.str();
@@ -213,6 +221,10 @@ public:
         return std::filesystem::exists(resourcesPath(resource));
     }
 
+    void updateFromV1() {
+        if(std::filesystem::exists(BIpathV1("channel.txt"))) dumpToFile(BIpathV1("channel.txt"), "disabled");
+    }
+
     Updater() {
         logStream.open(BIpath("log.txt"), std::ios_base::app);
         log("--------------------------");
@@ -220,6 +232,7 @@ public:
         isLoaded = loadBI();
 
         if(updateChannel() == "disabled") return;
+        updateFromV1();
 
         /**
          * Try to load minhook and download if failed

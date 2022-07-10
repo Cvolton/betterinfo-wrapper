@@ -71,7 +71,7 @@ public:
         std::stringstream pathStream;
         pathStream << "betterinfo";
         tryCreateDirectory(pathStream.str());
-        pathStream << "betterinfo/v2";
+        pathStream << "/v2";
         tryCreateDirectory(pathStream.str());
         pathStream << "/" << file;
         return pathStream.str();

@@ -1,7 +1,8 @@
-cmake_minimum_required(VERSION 3.10.0)
+cmake_minimum_required(VERSION 3.15.0)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded")
 cmake_policy(SET CMP0057 NEW)
 
 # option(BUILD_SHARED_LIBS "" ON)
@@ -17,7 +18,7 @@ add_library(betterinfo-wrapper SHARED ${SOURCE_FILES})
 
 target_include_directories(betterinfo-wrapper PRIVATE ${CMAKE_SOURCE_DIR}/libraries/curl/include)
 target_link_libraries(betterinfo-wrapper ${CMAKE_SOURCE_DIR}/libraries/curl/libcurl_a.lib ws2_32 Crypt32 Wldap32 Normaliz)
-target_link_options(betterinfo-wrapper PRIVATE "/OPT:REF,NOICF")
+target_link_options(betterinfo-wrapper PRIVATE "/OPT:REF,NOICF" "/NODEFAULTLIB:library")
 #end betterinfo-wrapper
 
 if (${CMAKE_CXX_COMPILER_ID} STREQUAL Clang)

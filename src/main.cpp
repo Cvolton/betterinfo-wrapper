@@ -15,6 +15,7 @@ public:
     std::string channel;
     std::string version;
     bool shownDownloadError = false;
+    bool shownDirectoryError = false;
     bool isLoaded = false;
 
     struct HttpResponse {
@@ -27,20 +28,51 @@ public:
     const char* BIurlRoot = "https://geometrydash.eu/mods/betterinfo/v2/";
 
     /**
+     * Error helper functions
+     */
+    static void showCriticalError(const char* content) {
+        MessageBox(nullptr, content, "BetterInfo - Geometry Dash", MB_OK | MB_ICONERROR | MB_SETFOREGROUND);
+    }
+
+    void showFileWriteError(const std::string& file) {
+        log("Failed to write: " + file);
+        std::stringstream errorText;
+        errorText << "Unable to write the following file: " << file << "\n\nMake sure you have enough disk space available and that Geometry Dash has permissions to write in the directory.\n\nIf the problem persists, you might want to look at the instructions for manual installation.";
+        showCriticalError(errorText.str().c_str());
+    }
+
+    void showDirectoryError() {
+        if(!shownDirectoryError) showCriticalError("Unable to create the directory required to store BetterInfo files.\n\nPossible fix:\n1) Create a folder called \"betterinfo\" in the folder with GeometryDash.exe\n2) Create a folder called \"v2\" inside this \"betterinfo\" folder");
+        shownDirectoryError = true;
+    }
+
+    void showDownloadError() {
+        if(!shownDownloadError) showCriticalError("Unable to download all required files to load BetterInfo.\n\nPlease make sure that you are connected to the internet and that Geometry Dash is able to access it.\n\nIf the problem persists, you might want to look at the instructions for manual installation.");
+        shownDownloadError = true;
+    }
+
+    /**
      * Path/URL helper functions
      */
+    void tryCreateDirectory(const std::string& path) {
+        try { std::filesystem::create_directory(path); }
+        catch (...) { showDirectoryError(); }
+    }
+
     std::string BIpathV1(const std::string& file) {
         std::stringstream pathStream;
         pathStream << "betterinfo/";
-        std::filesystem::create_directory(pathStream.str());
+        tryCreateDirectory(pathStream.str());
         pathStream << "/" << file;
         return pathStream.str();
     }
 
     std::string BIpath(const std::string& file) {
         std::stringstream pathStream;
-        pathStream << "betterinfo/v2/";
-        std::filesystem::create_directory(pathStream.str());
+        pathStream << "betterinfo";
+        tryCreateDirectory(pathStream.str());
+        pathStream << "betterinfo/v2";
+        tryCreateDirectory(pathStream.str());
         pathStream << "/" << file;
         return pathStream.str();
     }
@@ -86,25 +118,6 @@ public:
         struct tm timeinfo;
         localtime_s(&timeinfo, &t);
         logStream << "[" << std::put_time(&timeinfo, "%d-%m-%Y %H-%M-%S") << "] " << status << std::endl;
-    }
-
-    /**
-     * Error helper functions
-     */
-    static void showCriticalError(const char* content) {
-        MessageBox(nullptr, content, "BetterInfo - Geometry Dash", MB_OK | MB_ICONERROR | MB_SETFOREGROUND);
-    }
-
-    void showFileWriteError(const std::string& file) {
-        log("Failed to write: " + file);
-        std::stringstream errorText;
-        errorText << "Unable to write the following file: " << file << "\n\nMake sure you have enough disk space available and that Geometry Dash has permissions to write in the directory.\n\nIf the problem persists, you might want to look at the instructions for manual installation.";
-        showCriticalError(errorText.str().c_str());
-    }
-
-    void showDownloadError() {
-        if(!shownDownloadError) showCriticalError("Unable to download all required files to load BetterInfo.\n\nPlease make sure that you are connected to the internet and that Geometry Dash is able to access it.\n\nIf the problem persists, you might want to look at the instructions for manual installation.");
-        shownDownloadError = true;
     }
 
     /**
